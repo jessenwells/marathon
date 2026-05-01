@@ -2,16 +2,24 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <!-- No mobile viewport: Google's CastReceiver sample omits it; width=device-width
-         can skew layout on Cast/TV and distort the player aspect ratio. -->
     <title>Cast receiver</title>
-    <!-- Match googlecast/CastReceiver: no explicit width/height on cast-media-player.
-         Forcing 100% + position:fixed can skew non-standard frames (e.g. 920×720) vs Default Media Receiver. -->
     <style>
+      /* Custom elements default to display:inline; without block + height chain the
+         player box can layout wrong (distorted / soft) vs Default Media Receiver. */
+      html,
       body {
         margin: 0;
+        width: 100%;
+        height: 100%;
         overflow: hidden;
-        background: #000;
+        /* Distinctive tint so you can tell this deploy is live (letterbox + idle UI). */
+        background: #0f1729;
+      }
+      cast-media-player {
+        display: block;
+        width: 100%;
+        height: 100%;
+        --background-color: #0f1729;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -19,11 +27,9 @@
   <body>
     <cast-media-player></cast-media-player>
     <script>
-      const context = cast.framework.CastReceiverContext.getInstance();
-      const playbackConfig = new cast.framework.PlaybackConfig();
-      /* Bias ABR toward higher rungs on HLS/DASH (plain progressive MP4 is mostly “whatever file you loaded”). */
-      playbackConfig.initialBandwidth = 12_000_000;
-      context.start({ playbackConfig });
+      /* No CastReceiverOptions / PlaybackConfig — matches Default Media Receiver CAF defaults.
+         A sparse PlaybackConfig passed to start() can drop merged defaults and hurt ABR / scaling. */
+      cast.framework.CastReceiverContext.getInstance().start();
     </script>
   </body>
 </html>
