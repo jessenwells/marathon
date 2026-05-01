@@ -23,6 +23,18 @@
         box-sizing: border-box;
         width: 100%;
         height: 100%;
+        overflow: hidden;
+        /*
+          Some builds size the playback slot as a flex child; anchor full area
+          so inner shells get a sane containing block for % heights.
+        */
+        position: relative;
+        /*
+          Hide queue "your video will play in …" countdown. Variable is
+          undocumented in Google's public styling table but referenced by CAST
+          engineers on Stack Overflow; verify with chromecast://inspect if empty.
+        */
+        --next-preview-visibility: hidden;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -38,18 +50,137 @@
     -->
     <script>
       (function () {
-        /** Text-only nodes get styles with !important; CAF nests video/shaka under inner shadow roots. */
-        var ASPECT_CSS =
-          'video{max-width:100%!important;max-height:100%!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center!important;}';
+        /**
+         * Optional receiver-side queue / buffering tuning:
+         * preloadTime applies to QUEUE_* messages (receiver tries to honour it).
+         * https://developers.google.com/cast/docs/web_receiver/advanced#content-preload
+         * Negative preloadTime disables preload for those items per QueueItem docs.
+         */
+        var RECEIVER_QUEUE_PRELOAD_SECONDS = undefined;
 
-        function injectContainStyleIntoShadow(shadowRoot) {
+        /**
+         * If true, rewrite incoming QUEUE_LOAD / QUEUE_INSERT / QUEUE_UPDATE
+         * items so autoplay is always true.
+         */
+        var RECEIVER_QUEUE_FORCE_AUTOPLAY = false;
+
+        /**
+         * PlaybackConfig buffer thresholds within a single item (not cross-queue preload).
+         * https://developers.google.com/cast/docs/reference/web_receiver/cast.framework.PlaybackConfig
+         */
+        var RECEIVER_PLAYBACK_AUTOPAUSE_BUFFER_SEC = undefined;
+        var RECEIVER_PLAYBACK_AUTORESUME_BUFFER_SEC = undefined;
+
+        function buildReceiverStartOptionsOrNull() {
+          var tunePause =
+            typeof RECEIVER_PLAYBACK_AUTOPAUSE_BUFFER_SEC === "number";
+          var tuneResume =
+            typeof RECEIVER_PLAYBACK_AUTORESUME_BUFFER_SEC === "number";
+          if (!tunePause && !tuneResume) return null;
+          var opts = new cast.framework.CastReceiverOptions();
+          opts.playbackConfig = new cast.framework.PlaybackConfig();
+          if (tunePause)
+            opts.playbackConfig.autoPauseDuration =
+              RECEIVER_PLAYBACK_AUTOPAUSE_BUFFER_SEC;
+          if (tuneResume)
+            opts.playbackConfig.autoResumeDuration =
+              RECEIVER_PLAYBACK_AUTORESUME_BUFFER_SEC;
+          return opts;
+        }
+
+        function registerQueueMessageInterceptors() {
+          var usePreload =
+            typeof RECEIVER_QUEUE_PRELOAD_SECONDS === "number";
+          if (!usePreload && !RECEIVER_QUEUE_FORCE_AUTOPLAY) return;
+
+          function patchQueueItems(items) {
+            if (!items || !items.length) return;
+            var i;
+
+            if (typeof RECEIVER_QUEUE_PRELOAD_SECONDS === "number")
+              for (i = 0; i < items.length; i++) {
+                if (items[i])
+                  items[i].preloadTime = RECEIVER_QUEUE_PRELOAD_SECONDS;
+              }
+
+            if (RECEIVER_QUEUE_FORCE_AUTOPLAY)
+              for (i = 0; i < items.length; i++) {
+                if (items[i]) items[i].autoplay = true;
+              }
+          }
+
+          function interceptor(requestData) {
+            if (requestData && requestData.items)
+              patchQueueItems(requestData.items);
+            return requestData;
+          }
+
+          var ctx = cast.framework.CastReceiverContext.getInstance();
+          var pm = ctx.getPlayerManager();
+          var Mt = cast.framework.messages.MessageType;
+          pm.setMessageInterceptor(Mt.QUEUE_LOAD, interceptor);
+          pm.setMessageInterceptor(Mt.QUEUE_INSERT, interceptor);
+          pm.setMessageInterceptor(Mt.QUEUE_UPDATE, interceptor);
+        }
+
+        registerQueueMessageInterceptors();
+
+        /*
+          Aggressive sizing: pinning both width AND height on <video> to the slot
+          can still yield fill-like stretching on some Chromecast builds. Prefer
+          max constraints + intrinsic aspect-ratio from loadedmetadata handler.
+          Also normalize common CAF/Shaka wrappers (class names vary by FW).
+        */
+        var ASPECT_CSS = [
+          "[class*=video-container],",
+          "[class*=embed-player],",
+          "[class*=shaka-video-container]{",
+          "display:flex!important;",
+          "align-items:center!important;",
+          "justify-content:center!important;",
+          "}",
+          "video{",
+          "object-fit:contain!important;",
+          "object-position:center!important;",
+          "width:auto!important;",
+          "height:auto!important;",
+          "max-width:100%!important;",
+          "max-height:100%!important;",
+          "}",
+        ].join("");
+
+        function ensureAspectStyleInShadow(shadowRoot) {
           if (!shadowRoot) return;
-          var tag = "[data-cast-rcv-contain]";
-          if (shadowRoot.querySelector(tag)) return;
-          var style = document.createElement("style");
-          style.dataset.castRcvContain = "1";
-          style.textContent = ASPECT_CSS;
-          shadowRoot.insertBefore(style, shadowRoot.firstChild);
+          var marker = "[data-cast-rcv-contain]";
+          var el = shadowRoot.querySelector(marker);
+          if (!el) {
+            el = document.createElement("style");
+            el.setAttribute("data-cast-rcv-contain", "1");
+            shadowRoot.insertBefore(el, shadowRoot.firstChild);
+          }
+          el.textContent = ASPECT_CSS;
+        }
+
+        function attachVideoIntrinsicAspectHint(video) {
+          if (!video || video.__castRcAspectBound) return;
+          video.__castRcAspectBound = true;
+
+          function applyFromDecodedDimensions() {
+            var w = video.videoWidth;
+            var h = video.videoHeight;
+            if (!w || !h) return;
+            /*
+              Gives the replaced element box the stream's pixel aspect before
+              max-* clamping (helps when parent flex layout collapses odd heights).
+            */
+            video.style.aspectRatio = w + " / " + h;
+          }
+
+          video.addEventListener("loadedmetadata", applyFromDecodedDimensions);
+          video.addEventListener("emptied", function () {
+            video.style.aspectRatio = "";
+          });
+          if (video.readyState >= 1) applyFromDecodedDimensions();
         }
 
         function walkOpenShadowTrees(shadowRoot, visit) {
@@ -66,10 +197,13 @@
           var player = document.querySelector("cast-media-player");
           if (!player || !player.shadowRoot) return;
           walkOpenShadowTrees(player.shadowRoot, function (shadow) {
-            injectContainStyleIntoShadow(shadow);
+            ensureAspectStyleInShadow(shadow);
             shadow.querySelectorAll("video").forEach(function (video) {
               video.style.objectFit = "contain";
               video.style.objectPosition = "center center";
+              video.style.maxWidth = "100%";
+              video.style.maxHeight = "100%";
+              attachVideoIntrinsicAspectHint(video);
             });
           });
         }
@@ -121,9 +255,12 @@
         for (var j = 1; j <= 24; j++) {
           setTimeout(patchCastMediaPlayerSubtree, j * 150);
         }
-      })();
 
-      cast.framework.CastReceiverContext.getInstance().start();
+        var receiverOpts = buildReceiverStartOptionsOrNull();
+        var context = cast.framework.CastReceiverContext.getInstance();
+        if (receiverOpts) context.start(receiverOpts);
+        else context.start();
+      })();
     </script>
   </body>
 </html>
