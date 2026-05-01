@@ -8,10 +8,21 @@
       html,
       body {
         margin: 0;
-        object-fit: contain;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
       }
+      /*
+        Custom elements default to `display: inline`, which breaks percentage
+        sizing and can make the shadow-DOM video stretch to wrong dimensions.
+      */
       cast-media-player {
-        object-fit: contain;
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -19,6 +30,41 @@
   <body>
     <cast-media-player></cast-media-player>
     <script>
+      (function () {
+        function applyVideoContain(root) {
+          if (!root) return;
+          root.querySelectorAll("video").forEach(function (video) {
+            video.style.objectFit = "contain";
+          });
+        }
+
+        function watchCastMediaPlayer(root) {
+          function patch() {
+            applyVideoContain(root);
+          }
+          patch();
+          new MutationObserver(patch).observe(root, {
+            subtree: true,
+            childList: true,
+          });
+        }
+
+        function attachWhenReady(el) {
+          if (el.shadowRoot) {
+            watchCastMediaPlayer(el.shadowRoot);
+            return;
+          }
+          requestAnimationFrame(function () {
+            attachWhenReady(el);
+          });
+        }
+
+        var player = document.querySelector("cast-media-player");
+        if (player) {
+          attachWhenReady(player);
+        }
+      })();
+
       cast.framework.CastReceiverContext.getInstance().start();
     </script>
   </body>
