@@ -19,25 +19,64 @@
         sizing and can make the shadow-DOM video stretch to wrong dimensions.
       */
       cast-media-player {
-        display: none;
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
   </head>
   <body>
     <cast-media-player></cast-media-player>
+    <!--
+      Receiver IDs (not source code — these are hosted apps): CC1AD845 is
+      Google's Default Media Web Receiver (closed source). FFE417E5 is Bitmovin's
+      CAF v3 demo; C899A03E is Radiant Media Player's CAF receiver. For Google's
+      UX with CSS-only branding use "Styled Media Receiver" in Cast Console plus
+      an external stylesheet: https://developers.google.com/cast/docs/styled_receiver
+    -->
     <script>
       (function () {
-        function applyVideoContain(root) {
-          if (!root) return;
-          root.querySelectorAll("video").forEach(function (video) {
-            video.style.objectFit = "contain";
+        /** Text-only nodes get styles with !important; CAF nests video/shaka under inner shadow roots. */
+        var ASPECT_CSS =
+          'video{max-width:100%!important;max-height:100%!important;width:100%!important;height:100%!important;object-fit:contain!important;object-position:center!important;}';
+
+        function injectContainStyleIntoShadow(shadowRoot) {
+          if (!shadowRoot) return;
+          var tag = "[data-cast-rcv-contain]";
+          if (shadowRoot.querySelector(tag)) return;
+          var style = document.createElement("style");
+          style.dataset.castRcvContain = "1";
+          style.textContent = ASPECT_CSS;
+          shadowRoot.insertBefore(style, shadowRoot.firstChild);
+        }
+
+        function walkOpenShadowTrees(shadowRoot, visit) {
+          if (!shadowRoot) return;
+          visit(shadowRoot);
+          shadowRoot.querySelectorAll("*").forEach(function (node) {
+            if (node.shadowRoot) {
+              walkOpenShadowTrees(node.shadowRoot, visit);
+            }
           });
         }
 
-        function watchCastMediaPlayer(root) {
+        function patchCastMediaPlayerSubtree() {
+          var player = document.querySelector("cast-media-player");
+          if (!player || !player.shadowRoot) return;
+          walkOpenShadowTrees(player.shadowRoot, function (shadow) {
+            injectContainStyleIntoShadow(shadow);
+            shadow.querySelectorAll("video").forEach(function (video) {
+              video.style.objectFit = "contain";
+              video.style.objectPosition = "center center";
+            });
+          });
+        }
+
+        function watchCastMediaPlayerOuter(root) {
           function patch() {
-            applyVideoContain(root);
+            patchCastMediaPlayerSubtree();
           }
           patch();
           new MutationObserver(patch).observe(root, {
@@ -46,19 +85,41 @@
           });
         }
 
-        function attachWhenReady(el) {
+        function attachOuterWhenReady(el) {
           if (el.shadowRoot) {
-            watchCastMediaPlayer(el.shadowRoot);
+            watchCastMediaPlayerOuter(el.shadowRoot);
             return;
           }
           requestAnimationFrame(function () {
-            attachWhenReady(el);
+            attachOuterWhenReady(el);
           });
         }
 
         var player = document.querySelector("cast-media-player");
         if (player) {
-          attachWhenReady(player);
+          attachOuterWhenReady(player);
+        }
+
+        /** Re-patch after loads (Shaka / inner shells mount late vs first paint). */
+        function hookPlayerManager() {
+          var ctx = cast.framework.CastReceiverContext.getInstance();
+          var pm = ctx.getPlayerManager();
+          var Et = cast.framework.events.EventType;
+          function schedulePatch() {
+            requestAnimationFrame(function () {
+              setTimeout(patchCastMediaPlayerSubtree, 0);
+            });
+          }
+          pm.addEventListener(Et.PLAYER_LOADING, schedulePatch);
+          pm.addEventListener(Et.PLAYER_LOAD_COMPLETE, schedulePatch);
+          pm.addEventListener(Et.PLAYING, schedulePatch);
+        }
+
+        hookPlayerManager();
+
+        /** Short burst in case MutationObserver misses a closed-upgrade path. */
+        for (var j = 1; j <= 24; j++) {
+          setTimeout(patchCastMediaPlayerSubtree, j * 150);
         }
       })();
 
