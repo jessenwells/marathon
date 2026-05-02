@@ -21,6 +21,7 @@
         height: 100%;
         overflow: hidden;
         position: relative;
+        --next-preview-visibility: hidden;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -29,77 +30,14 @@
     <cast-media-player></cast-media-player>
     <script>
       /*
-        Aspect: some Chromecast builds distort <video> inside cast-media-player
-        when boxed with width AND height both 100%. Inject into open shadow roots:
-        wrappers fill viewport + flex-center; video uses max dims + contain.
+        Aspect fix (some Chromecast + cast-media-player builds distort <video>
+        when it is boxed with width and height both 100%). Together:
+        — Shadow CSS: max-width/max-height + object-fit:contain + auto w/h,
+          wrappers full viewport + flex center.
+        — loadedmetadata: aspect-ratio from videoWidth / videoHeight.
       */
       (function () {
-        var SHADOW_CSS = [
-          "[class*=video-container],",
-          "[class*=embed-player],",
-          "[class*=shaka-video-container]{",
-          "width:100%!important;height:100%!important;",
-          "min-height:0!important;",
-          "box-sizing:border-box!important;",
-          "display:flex!important;",
-          "align-items:center!important;",
-          "justify-content:center!important;",
-          "}",
-          "video{",
-          "object-fit:contain!important;",
-          "object-position:center!important;",
-          "width:auto!important;",
-          "height:auto!important;",
-          "max-width:100%!important;",
-          "max-height:100%!important;",
-          "flex:0 0 auto!important;",
-          "}",
-        ].join("");
-
-        function injectAspectStyles(root) {
-          if (!root) return;
-          var el = root.querySelector("[data-cast-rcv-aspect-fix]");
-          if (!el) {
-            el = document.createElement("style");
-            el.setAttribute("data-cast-rcv-aspect-fix", "1");
-            root.insertBefore(el, root.firstChild);
-          }
-          el.textContent = SHADOW_CSS;
-        }
-
-        function walkOpenShadowTrees(root, visit) {
-          if (!root) return;
-          visit(root);
-          root.querySelectorAll("*").forEach(function (n) {
-            if (n.shadowRoot) walkOpenShadowTrees(n.shadowRoot, visit);
-          });
-        }
-
-        function applyAspectFixToPlayer() {
-          var cmp = document.querySelector("cast-media-player");
-          if (!cmp || !cmp.shadowRoot) return;
-          walkOpenShadowTrees(cmp.shadowRoot, injectAspectStyles);
-        }
-
-        var cmp = document.querySelector("cast-media-player");
-        if (cmp) {
-          (function attachPatchWhenShadowReady() {
-            function tick() {
-              if (cmp.shadowRoot) {
-                applyAspectFixToPlayer();
-                new MutationObserver(applyAspectFixToPlayer).observe(
-                  cmp.shadowRoot,
-                  { subtree: true, childList: true }
-                );
-              } else {
-                requestAnimationFrame(tick);
-              }
-            }
-            tick();
-          })();
-        }
-
-        cast.framework.CastReceiverContext.getInstance().start();
+      cast.framework.CastReceiverContext.getInstance().start();
       })();
     </script>
   </body>
