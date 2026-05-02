@@ -16,10 +16,6 @@
       background: #000;
     }
 
-    .controls-container {
-      display: none !important;
-    }
-
     cast-media-player {
       display: block;
       box-sizing: border-box;
@@ -28,7 +24,15 @@
       position: relative;
       background-size: cover;
       --next-preview-visibility: hidden;
-      --splash-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fmary-hartman-cover-wide.webp?alt=media');
+      --background-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fmary-hartman-cover-wide.webp?alt=media');
+    }
+
+    .controls-container {
+      display: none !important;
+    }
+
+    .controls-progress {
+      display: none !important;
     }
   </style>
   <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
