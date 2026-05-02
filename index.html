@@ -25,9 +25,6 @@
         --watermark-size: 65px;
         --watermark-position: bottom left;
       }
-      .cast-media-player .watermark {
-        margin-bottom: -65px !important;
-      }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
   </head>
@@ -35,25 +32,50 @@
     <cast-media-player></cast-media-player>
     <script>
       /*
-        Styling reference (watermark, progress, splash, etc.):
+        TV UI: strip metadata on LOAD (no official CSS to hide the row):
         https://developers.google.com/cast/docs/web_receiver/customize_ui
 
-        There is no documented CSS variable to hide the metadata row (title /
-        subtitle / artwork). To show only watermark + progress, strip display
-        fields on LOAD before the default UI reads them. Same pattern as
-        secondary-image examples:
-        https://developers.google.com/cast/docs/web_receiver/secondary_image
+        Sender / expanded controller: reads MediaStatus from the receiver. After
+        load, we broadcast artwork again with setMediaInformation(..., true) so
+        phones still get cover art, while titles stay cleared for the TV layout.
 
-        Set STRIP_METADATA_FOR_UI to false to show sender metadata again.
+        https://developers.google.com/cast/docs/reference/caf_receiver/cast.framework.PlayerManager#setMediainformation
+
+        If the poster briefly flashes on TV after this, increase RESTORE_DELAY_MS.
       */
       (function () {
         var STRIP_METADATA_FOR_UI = true;
+        var RESTORE_DELAY_MS = 0;
+
+        var pendingArtwork = null;
+
+        function imageUrl(img) {
+          if (!img) return "";
+          if (typeof img === "string") return img;
+          return img.url || img.contentUrl || "";
+        }
+
+        function snapshotArtwork(md) {
+          if (!md) return null;
+          var urls = [];
+          if (md.images && md.images.length) {
+            for (var i = 0; i < md.images.length; i++) {
+              var u = imageUrl(md.images[i]);
+              if (u) urls.push(u);
+            }
+          }
+          var sec = md.secondaryImage;
+          var secUrl = sec ? imageUrl(sec) : "";
+          return { urls: urls, secondaryUrl: secUrl || "" };
+        }
 
         function stripReceiverDisplayMetadata(loadRequestData) {
           if (!STRIP_METADATA_FOR_UI) return;
           var media = loadRequestData && loadRequestData.media;
           var md = media && media.metadata;
           if (!md) return;
+
+          pendingArtwork = snapshotArtwork(md);
 
           md.images = [];
           if ("secondaryImage" in md) md.secondaryImage = null;
@@ -68,8 +90,32 @@
           if ("episodeTitle" in md) md.episodeTitle = "";
         }
 
+        function restoreArtworkForSenders(pm) {
+          if (!STRIP_METADATA_FOR_UI || !pendingArtwork) return;
+          var snap = pendingArtwork;
+          pendingArtwork = null;
+
+          var info = pm.getMediaInformation();
+          if (!info || !info.metadata) return;
+
+          var Image = cast.framework.messages.Image;
+          var md = info.metadata;
+
+          if (snap.urls.length) {
+            md.images = snap.urls.map(function (u) {
+              return new Image(u);
+            });
+          }
+          if ("secondaryImage" in md && snap.secondaryUrl) {
+            md.secondaryImage = new Image(snap.secondaryUrl);
+          }
+
+          pm.setMediaInformation(info, true);
+        }
+
         var ctx = cast.framework.CastReceiverContext.getInstance();
         var pm = ctx.getPlayerManager();
+
         pm.setMessageInterceptor(
           cast.framework.messages.MessageType.LOAD,
           function (loadRequestData) {
@@ -77,6 +123,18 @@
             return loadRequestData;
           }
         );
+
+        pm.addEventListener(
+          cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+          function () {
+            function run() {
+              restoreArtworkForSenders(pm);
+            }
+            if (RESTORE_DELAY_MS > 0) setTimeout(run, RESTORE_DELAY_MS);
+            else run();
+          }
+        );
+
         ctx.start();
       })();
     </script>
