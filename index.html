@@ -23,16 +23,7 @@
   <body>
     <cast-media-player></cast-media-player>
     <script>
-      /*
-        Aspect fix (some Chromecast + cast-media-player builds distort <video>
-        when it is boxed with width and height both 100%). Together:
-        — Shadow CSS: max-width/max-height + object-fit:contain + auto w/h,
-          wrappers full viewport + flex center.
-        — loadedmetadata: aspect-ratio from videoWidth / videoHeight.
-      */
-      (function () {
       cast.framework.CastReceiverContext.getInstance().start();
-      })();
     </script>
   </body>
 </html>
