@@ -1,52 +1,81 @@
 <!DOCTYPE html>
 <html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Cast receiver</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+      }
+      cast-media-player {
+        display: block;
+        box-sizing: border-box;
+        width: 100%;
+        height: 100%;
+        position: relative;
+        --next-preview-visibility: hidden;
+        --watermark-image: url("https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fwatermark.png?alt=media");
+        --watermark-size: 65px;
+        --watermark-position: bottom left;
+      }
+    </style>
+    <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+  </head>
+  <body>
+    <cast-media-player></cast-media-player>
+    <script>
+      /*
+        Styling reference (watermark, progress, splash, etc.):
+        https://developers.google.com/cast/docs/web_receiver/customize_ui
 
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Cast receiver</title>
-  <style>
-    html,
-    body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #000;
-    }
+        There is no documented CSS variable to hide the metadata row (title /
+        subtitle / artwork). To show only watermark + progress, strip display
+        fields on LOAD before the default UI reads them. Same pattern as
+        secondary-image examples:
+        https://developers.google.com/cast/docs/web_receiver/secondary_image
 
-    cast-media-player {
-      display: block;
-      box-sizing: border-box;
-      width: 100%;
-      height: 100%;
-      position: relative;
-      /* background-size: cover; */
-      --watermark-position: bottom left;
-      --theme-hue: 200;
-      --next-preview-visibility: hidden;
-      --watermark-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fwatermark.png?alt=media');
-      --watermark-size: 65px;
-      /* --background-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fmary-hartman-cover-wide.webp?alt=media'); */
-    }
+        Set STRIP_METADATA_FOR_UI to false to show sender metadata again.
+      */
+      (function () {
+        var STRIP_METADATA_FOR_UI = true;
 
-    .cast-media-player .media-metadata {
-      display: none !important;
-    }
+        function stripReceiverDisplayMetadata(loadRequestData) {
+          if (!STRIP_METADATA_FOR_UI) return;
+          var media = loadRequestData && loadRequestData.media;
+          var md = media && media.metadata;
+          if (!md) return;
 
-    .cast-media-player .media-artwork {
-      display: none !important;
-    }
-  </style>
-  <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-</head>
+          md.images = [];
+          if ("secondaryImage" in md) md.secondaryImage = null;
 
-<body>
-  <cast-media-player></cast-media-player>
-  <script>
-    cast.framework.CastReceiverContext.getInstance().start();
-  </script>
-</body>
+          if ("title" in md) md.title = "";
+          if ("subtitle" in md) md.subtitle = "";
+          if ("albumName" in md) md.albumName = "";
+          if ("albumArtist" in md) md.albumArtist = "";
+          if ("artist" in md) md.artist = "";
+          if ("composer" in md) md.composer = "";
+          if ("seriesTitle" in md) md.seriesTitle = "";
+          if ("episodeTitle" in md) md.episodeTitle = "";
+        }
 
+        var ctx = cast.framework.CastReceiverContext.getInstance();
+        var pm = ctx.getPlayerManager();
+        pm.setMessageInterceptor(
+          cast.framework.messages.MessageType.LOAD,
+          function (loadRequestData) {
+            stripReceiverDisplayMetadata(loadRequestData);
+            return loadRequestData;
+          }
+        );
+        ctx.start();
+      })();
+    </script>
+  </body>
 </html>
