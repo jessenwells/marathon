@@ -28,7 +28,7 @@
   </head>
   <body>
     <cast-media-player></cast-media-player>
-    <!-- <script>
+    <script>
       /*
         Aspect fix (some Chromecast + cast-media-player builds distort <video>
         when it is boxed with width and height both 100%). Together:
@@ -59,82 +59,83 @@
           "}",
         ].join("");
 
-        function shadowStyleEnsure(root) {
-          if (!root) return;
-          var el = root.querySelector("[data-cast-rcv-aspect-fix]");
-          if (!el) {
-            el = document.createElement("style");
-            el.setAttribute("data-cast-rcv-aspect-fix", "1");
-            root.insertBefore(el, root.firstChild);
-          }
-          el.textContent = SHADOW_CSS;
-        }
+      //   function shadowStyleEnsure(root) {
+      //     if (!root) return;
+      //     var el = root.querySelector("[data-cast-rcv-aspect-fix]");
+      //     if (!el) {
+      //       el = document.createElement("style");
+      //       el.setAttribute("data-cast-rcv-aspect-fix", "1");
+      //       root.insertBefore(el, root.firstChild);
+      //     }
+      //     el.textContent = SHADOW_CSS;
+      //   }
 
-        function bindVideoAspectFromDecoder(video) {
-          if (!video || video.__castRcAspectRx) return;
-          video.__castRcAspectRx = true;
+      //   function bindVideoAspectFromDecoder(video) {
+      //     if (!video || video.__castRcAspectRx) return;
+      //     video.__castRcAspectRx = true;
 
-          function sync() {
-            var w = video.videoWidth;
-            var h = video.videoHeight;
-            if (w && h) video.style.aspectRatio = w + " / " + h;
-          }
+      //     function sync() {
+      //       var w = video.videoWidth;
+      //       var h = video.videoHeight;
+      //       if (w && h) video.style.aspectRatio = w + " / " + h;
+      //     }
 
-          video.addEventListener("loadedmetadata", sync);
-          video.addEventListener("emptied", function () {
-            video.style.aspectRatio = "";
-          });
-          if (video.readyState >= 1) sync();
-        }
+      //     video.addEventListener("loadedmetadata", sync);
+      //     video.addEventListener("emptied", function () {
+      //       video.style.aspectRatio = "";
+      //     });
+      //     if (video.readyState >= 1) sync();
+      //   }
 
-        function walkShadows(root, fn) {
-          if (!root) return;
-          fn(root);
-          root.querySelectorAll("*").forEach(function (n) {
-            if (n.shadowRoot) walkShadows(n.shadowRoot, fn);
-          });
-        }
+      //   function walkShadows(root, fn) {
+      //     if (!root) return;
+      //     fn(root);
+      //     root.querySelectorAll("*").forEach(function (n) {
+      //       if (n.shadowRoot) walkShadows(n.shadowRoot, fn);
+      //     });
+      //   }
 
-        function applyPlaybackAspectFix() {
-          var cmp = document.querySelector("cast-media-player");
-          if (!cmp || !cmp.shadowRoot) return;
-          walkShadows(cmp.shadowRoot, function (sh) {
-            shadowStyleEnsure(sh);
-            sh.querySelectorAll("video").forEach(bindVideoAspectFromDecoder);
-          });
-        }
+      //   function applyPlaybackAspectFix() {
+      //     var cmp = document.querySelector("cast-media-player");
+      //     if (!cmp || !cmp.shadowRoot) return;
+      //     walkShadows(cmp.shadowRoot, function (sh) {
+      //       shadowStyleEnsure(sh);
+      //       sh.querySelectorAll("video").forEach(bindVideoAspectFromDecoder);
+      //     });
+      //   }
 
-        var cmp = document.querySelector("cast-media-player");
-        if (cmp) {
-          (function attachObserverWhenShadowReady() {
-            function tick() {
-              if (cmp.shadowRoot) {
-                applyPlaybackAspectFix();
-                new MutationObserver(applyPlaybackAspectFix).observe(
-                  cmp.shadowRoot,
-                  { subtree: true, childList: true }
-                );
-              } else {
-                requestAnimationFrame(tick);
-              }
-            }
-            tick();
-          })();
-        }
+      //   var cmp = document.querySelector("cast-media-player");
+      //   if (cmp) {
+      //     (function attachObserverWhenShadowReady() {
+      //       function tick() {
+      //         if (cmp.shadowRoot) {
+      //           applyPlaybackAspectFix();
+      //           new MutationObserver(applyPlaybackAspectFix).observe(
+      //             cmp.shadowRoot,
+      //             { subtree: true, childList: true }
+      //           );
+      //         } else {
+      //           requestAnimationFrame(tick);
+      //         }
+      //       }
+      //       tick();
+      //     })();
+      //   }
 
-        var ctx = cast.framework.CastReceiverContext.getInstance();
-        var pm = ctx.getPlayerManager();
-        var Et = cast.framework.events.EventType;
+      //   var ctx = cast.framework.CastReceiverContext.getInstance();
+      //   var pm = ctx.getPlayerManager();
+      //   var Et = cast.framework.events.EventType;
 
-        pm.addEventListener(Et.PLAYER_LOAD_COMPLETE, function () {
-          requestAnimationFrame(applyPlaybackAspectFix);
-        });
-        pm.addEventListener(Et.PLAYING, function () {
-          requestAnimationFrame(applyPlaybackAspectFix);
-        });
+      //   pm.addEventListener(Et.PLAYER_LOAD_COMPLETE, function () {
+      //     requestAnimationFrame(applyPlaybackAspectFix);
+      //   });
+      //   pm.addEventListener(Et.PLAYING, function () {
+      //     requestAnimationFrame(applyPlaybackAspectFix);
+      //   });
 
-        ctx.start();
+      //   ctx.start();
+      cast.framework.CastReceiverContext.getInstance().start();
       })();
-    </script> -->
+    </script>
   </body>
 </html>
