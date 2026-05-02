@@ -16,6 +16,10 @@
       background: #000;
     }
 
+    .controls-container {
+      display: none !important;
+    }
+
     cast-media-player {
       display: block;
       box-sizing: border-box;
@@ -24,7 +28,6 @@
       position: relative;
       background-size: cover;
       --next-preview-visibility: hidden;
-      --background-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fmary-hartman-cover-wide.webp?alt=media');
       --splash-image: url('https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fmary-hartman-cover-wide.webp?alt=media');
     }
   </style>
@@ -37,4 +40,5 @@
     cast.framework.CastReceiverContext.getInstance().start();
   </script>
 </body>
+
 </html>
