@@ -23,7 +23,7 @@
         --next-preview-visibility: hidden;
         --watermark-image: url("https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fwatermark.png?alt=media");
         --watermark-size: 65px;
-        --watermark-position: 0 calc(100% + var(--watermark-size) / 2);
+        --watermark-position: 0 calc(100% + var(--watermark-size));
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -37,9 +37,61 @@
         https://developers.google.com/cast/docs/web_receiver/secondary_image
 
         Set STRIP_METADATA_FOR_UI to false to show sender metadata on the TV again.
+
+        Watermark stacking: there is no --watermark-z-index in Google's table
+        (https://developers.google.com/cast/docs/web_receiver/customize_ui). We
+        inject shadow CSS so .watermark uses position:absolute + a high z-index.
       */
       (function () {
         var STRIP_METADATA_FOR_UI = true;
+        var WATERMARK_Z_INDEX = 9999999999;
+
+        function injectWatermarkStackCss(shadowRoot) {
+          if (!shadowRoot) return;
+          var marker = "[data-rcv-wm-stack]";
+          var el = shadowRoot.querySelector(marker);
+          if (!el) {
+            el = document.createElement("style");
+            el.setAttribute("data-rcv-wm-stack", "1");
+            shadowRoot.insertBefore(el, shadowRoot.firstChild);
+          }
+          el.textContent =
+            ".watermark{position:absolute!important;z-index:" +
+            WATERMARK_Z_INDEX +
+            "!important;pointer-events:none!important;}";
+        }
+
+        function walkOpenShadowTrees(root, visit) {
+          if (!root) return;
+          visit(root);
+          root.querySelectorAll("*").forEach(function (n) {
+            if (n.shadowRoot) walkOpenShadowTrees(n.shadowRoot, visit);
+          });
+        }
+
+        function applyWatermarkZStackFix() {
+          var cmp = document.querySelector("cast-media-player");
+          if (!cmp || !cmp.shadowRoot) return;
+          walkOpenShadowTrees(cmp.shadowRoot, injectWatermarkStackCss);
+        }
+
+        function attachWatermarkZStackWhenReady() {
+          var cmp = document.querySelector("cast-media-player");
+
+          function tick() {
+            if (!cmp || !cmp.shadowRoot) {
+              requestAnimationFrame(tick);
+              return;
+            }
+            applyWatermarkZStackFix();
+            new MutationObserver(applyWatermarkZStackFix).observe(cmp.shadowRoot, {
+              subtree: true,
+              childList: true,
+            });
+          }
+
+          tick();
+        }
 
         function stripReceiverDisplayMetadata(loadRequestData) {
           if (!STRIP_METADATA_FOR_UI) return;
@@ -72,6 +124,12 @@
         );
 
         ctx.start();
+
+        attachWatermarkZStackWhenReady();
+        pm.addEventListener(
+          cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+          applyWatermarkZStackFix
+        );
       })();
     </script>
   </body>
