@@ -35,10 +35,31 @@
     <script>
       (function () {
         var PLAYER_SHADOW_CSS =
+          "@-webkit-keyframes minimal-ui-spin { 0% { -webkit-transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); } }" +
+          "@keyframes minimal-ui-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }" +
           ".slideshow, .slideshow.active { display: none !important; }" +
           ".player .logo, .player .splash { color: transparent !important; font-size: 0 !important; }" +
           ".player .background { background-image: none !important; }" +
-          "video.mediaElement, #castMediaElement { display: block !important; visibility: visible !important; opacity: 1 !important; }";
+          "video.mediaElement, #castMediaElement { display: block !important; visibility: visible !important; opacity: 1 !important; }" +
+          ".player[data-media-category='VIDEO'][data-state='loading'] .spinner," +
+          ".player[data-media-category='VIDEO'][data-state='buffering'] .spinner," +
+          ".player[data-minimal-spinner='true'] .spinner {" +
+          "  display: block !important;" +
+          "  visibility: visible !important;" +
+          "  opacity: 1 !important;" +
+          "  position: absolute !important;" +
+          "  left: 50% !important;" +
+          "  top: 50% !important;" +
+          "  bottom: auto !important;" +
+          "  right: auto !important;" +
+          "  margin-left: -16px !important;" +
+          "  margin-top: -16px !important;" +
+          "  width: 32px !important;" +
+          "  height: 32px !important;" +
+          "  z-index: 1000 !important;" +
+          "  -webkit-animation: minimal-ui-spin 1s infinite linear !important;" +
+          "  animation: minimal-ui-spin 1s infinite linear !important;" +
+          "}";
 
         var OVERLAY_SHADOW_CSS =
           "#castControlsTimeline," +
@@ -119,7 +140,45 @@
           "  display: block !important;" +
           "  visibility: visible !important;" +
           "  opacity: 1 !important;" +
+          "}" +
+          ":host([data-media-category='VIDEO'][data-state='buffering']) .gradient," +
+          ":host([data-media-category='VIDEO'][data-state='paused'][data-display-status='false']) .gradient," +
+          ":host([data-media-category='VIDEO'][data-state='loading']) .gradient," +
+          ":host([data-media-category='VIDEO'][data-state='playing']) .gradient," +
+          ":host([data-media-category='VIDEO'][data-state='paused']) .gradient," +
+          ".tv-overlay[data-media-category='VIDEO'][data-state='buffering'] .gradient," +
+          ".tv-overlay[data-media-category='VIDEO'][data-state='paused'][data-display-status='false'] .gradient," +
+          ".gradient," +
+          '[class*="gradient"] {' +
+          "  display: none !important;" +
+          "  visibility: hidden !important;" +
+          "  opacity: 0 !important;" +
+          "  pointer-events: none !important;" +
           "}";
+
+        function syncBufferingSpinner(playerData) {
+          var player = document.querySelector("cast-media-player");
+          if (!player || !player.shadowRoot) return;
+          var castPlayer =
+            player.shadowRoot.querySelector("#castPlayer") ||
+            player.shadowRoot.querySelector(".player");
+          if (!castPlayer) return;
+
+          var show = false;
+          var dataState = castPlayer.getAttribute("data-state");
+          if (dataState === "loading" || dataState === "buffering") show = true;
+
+          if (playerData && cast.framework.ui && cast.framework.ui.State) {
+            var uiState = playerData.state;
+            show =
+              show ||
+              uiState === cast.framework.ui.State.LOADING ||
+              uiState === cast.framework.ui.State.BUFFERING;
+          }
+
+          if (show) castPlayer.setAttribute("data-minimal-spinner", "true");
+          else castPlayer.removeAttribute("data-minimal-spinner");
+        }
 
         function injectStyle(shadowRoot, styleId, css) {
           if (!shadowRoot) return false;
@@ -145,11 +204,14 @@
           return true;
         }
 
+        var playerData = {};
+
         function applyMinimalUi() {
           var player = document.querySelector("cast-media-player");
           if (!player || !player.shadowRoot) return false;
 
           injectStyle(player.shadowRoot, "minimal-ui-player", PLAYER_SHADOW_CSS);
+          syncBufferingSpinner(playerData);
 
           var overlay = player.shadowRoot.querySelector("tv-overlay");
           if (!overlay) return false;
@@ -171,8 +233,27 @@
             if (!player.shadowRoot) return;
             applyMinimalUi();
             new MutationObserver(function () {
+              syncBufferingSpinner(playerData);
               applyMinimalUi();
             }).observe(player.shadowRoot, { childList: true, subtree: true });
+            var castPlayer = player.shadowRoot.querySelector("#castPlayer, .player");
+            if (castPlayer) {
+              new MutationObserver(function () {
+                syncBufferingSpinner(playerData);
+              }).observe(castPlayer, {
+                attributes: true,
+                attributeFilter: ["data-state"],
+              });
+            }
+            var tvOverlay = player.shadowRoot.querySelector("tv-overlay");
+            if (tvOverlay) {
+              new MutationObserver(function () {
+                applyMinimalUi();
+              }).observe(tvOverlay, {
+                attributes: true,
+                attributeFilter: ["data-state", "data-display-status"],
+              });
+            }
           }
 
           if (player.shadowRoot) attachObserver();
@@ -185,13 +266,29 @@
         observePlayerShadow();
 
         if (cast.framework.ui && cast.framework.ui.PlayerDataBinder) {
-          var playerData = {};
           var binder = new cast.framework.ui.PlayerDataBinder(playerData);
           binder.addEventListener(
             cast.framework.ui.PlayerDataEventType.STATE_CHANGED,
-            applyMinimalUi
+            function () {
+              syncBufferingSpinner(playerData);
+              applyMinimalUi();
+            }
           );
         }
+
+        var pm = ctx.getPlayerManager();
+        pm.addEventListener(
+          cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
+          function () {
+            syncBufferingSpinner(playerData);
+          }
+        );
+        pm.addEventListener(cast.framework.events.EventType.BUFFERING, function () {
+          syncBufferingSpinner(playerData);
+        });
+        pm.addEventListener(cast.framework.events.EventType.BUFFERED, function () {
+          syncBufferingSpinner(playerData);
+        });
       })();
     </script>
   </body>
