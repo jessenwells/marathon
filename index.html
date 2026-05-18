@@ -59,6 +59,13 @@
           "  z-index: 1000 !important;" +
           "  -webkit-animation: minimal-ui-spin 1s infinite linear !important;" +
           "  animation: minimal-ui-spin 1s infinite linear !important;" +
+          "}" +
+          "video::cue, video::cue(v), ::cue, ::cue(v) {" +
+          "  font-family: sans-serif !important;" +
+          "  color: #ffffff !important;" +
+          "  background-color: transparent !important;" +
+          "  background: transparent !important;" +
+          "  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 8px rgba(0, 0, 0, 0.85) !important;" +
           "}";
 
         var OVERLAY_SHADOW_CSS =
@@ -156,6 +163,30 @@
           "  pointer-events: none !important;" +
           "}";
 
+        function applySubtitleStyle() {
+          var ctx = cast.framework.CastReceiverContext.getInstance();
+          var ttm = ctx.getPlayerManager().getTextTracksManager();
+          if (!ttm || !cast.framework.messages) return;
+
+          var msgs = cast.framework.messages;
+          var style = new msgs.TextTrackStyle();
+          style.fontGenericFamily = msgs.TextTrackFontGenericFamily.SANS_SERIF;
+          style.fontFamily = "sans-serif";
+          style.foregroundColor = "#FFFFFFFF";
+          style.backgroundColor = "#00000000";
+          style.windowType = msgs.TextTrackWindowType.NONE;
+          style.windowColor = "#00000000";
+          style.edgeType = msgs.TextTrackEdgeType.DROP_SHADOW;
+          style.edgeColor = "#000000DD";
+          style.fontScale = 1.0;
+
+          try {
+            ttm.setTextTrackStyle(style);
+          } catch (e) {
+            console.warn("[minimal-ui] setTextTrackStyle failed", e);
+          }
+        }
+
         function syncBufferingSpinner(playerData) {
           var player = document.querySelector("cast-media-player");
           if (!player || !player.shadowRoot) return;
@@ -211,6 +242,7 @@
           if (!player || !player.shadowRoot) return false;
 
           injectStyle(player.shadowRoot, "minimal-ui-player", PLAYER_SHADOW_CSS);
+          applySubtitleStyle();
           syncBufferingSpinner(playerData);
 
           var overlay = player.shadowRoot.querySelector("tv-overlay");
@@ -261,6 +293,7 @@
         }
 
         var ctx = cast.framework.CastReceiverContext.getInstance();
+        ctx.addEventListener(cast.framework.system.EventType.READY, applySubtitleStyle);
         ctx.start();
         watchForMinimalUi();
         observePlayerShadow();
@@ -280,6 +313,7 @@
         pm.addEventListener(
           cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
           function () {
+            applySubtitleStyle();
             syncBufferingSpinner(playerData);
           }
         );
