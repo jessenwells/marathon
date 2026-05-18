@@ -29,120 +29,142 @@
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
-    <!-- Set false before production. Ultra often blocks chrome://inspect :9222 — use this + CaC tool instead. -->
-    <script>
-      var DEBUG_RECEIVER = true;
-    </script>
-    <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
   </head>
   <body>
     <cast-media-player></cast-media-player>
     <script>
       (function () {
-        var LOG_TAG = "minimal-ui";
-        var castDebugLogger =
-          typeof cast !== "undefined" &&
-          cast.debug &&
-          cast.debug.CastDebugLogger
-            ? cast.debug.CastDebugLogger.getInstance()
-            : null;
+        var PLAYER_SHADOW_CSS =
+          ".slideshow, .slideshow.active { display: none !important; }" +
+          ".player .logo, .player .splash { color: transparent !important; font-size: 0 !important; }" +
+          ".player .background { background-image: none !important; }" +
+          "video.mediaElement, #castMediaElement { display: block !important; visibility: visible !important; opacity: 1 !important; }";
 
-        function log(level, message) {
-          if (!castDebugLogger || !DEBUG_RECEIVER) return;
-          castDebugLogger[level](LOG_TAG, message);
-        }
+        var OVERLAY_SHADOW_CSS =
+          ".controls-progress," +
+          ".controls-progress-inner," +
+          ".controls-progress-thumb," +
+          ".controls-timeline," +
+          ".progressBar," +
+          ".progress-bar," +
+          "#progress," +
+          '[class*="progress"] {' +
+          "  display: none !important;" +
+          "  visibility: hidden !important;" +
+          "  opacity: 0 !important;" +
+          "  max-height: 0 !important;" +
+          "  pointer-events: none !important;" +
+          "}" +
+          ".controls-metadata," +
+          ".metadata," +
+          ".media-metadata," +
+          ".media-info," +
+          ".info-container," +
+          ".overlay-metadata," +
+          ".overlay-text," +
+          ".media-text," +
+          ".title-container," +
+          ".text-container," +
+          ".media-title," +
+          ".media-subtitle," +
+          ".overlay-title," +
+          ".overlay-subtitle," +
+          ".title," +
+          ".subtitle," +
+          ".sub-title," +
+          "#metadata," +
+          "#overlay-title," +
+          ".overlay-image," +
+          ".thumbnail," +
+          ".media-image," +
+          "#overlay-image," +
+          ".current-time," +
+          ".duration," +
+          ".time-label," +
+          '[class*="time-label"],' +
+          '[class*="metadata"],' +
+          '[class*="thumbnail"],' +
+          '[class*="Thumbnail"],' +
+          '[class*="artwork"],' +
+          '[class*="Artwork"] {' +
+          "  display: none !important;" +
+          "  visibility: hidden !important;" +
+          "  opacity: 0 !important;" +
+          "  pointer-events: none !important;" +
+          "}" +
+          ".next-up," +
+          '[class*="next-preview"],' +
+          '[class*="NextPreview"] {' +
+          "  display: none !important;" +
+          "}" +
+          ".controls-play-pause," +
+          ".play-pause," +
+          '[class*="play-pause"],' +
+          '[class*="PlayPause"] {' +
+          "  display: block !important;" +
+          "  visibility: visible !important;" +
+          "  opacity: 1 !important;" +
+          "}";
 
-        function injectMinimalPlayerChrome(player) {
-          if (!player || !player.shadowRoot) return false;
-          if (player.shadowRoot.querySelector("#minimal-ui-style")) return true;
-
+        function injectStyle(shadowRoot, styleId, css) {
+          if (!shadowRoot) return false;
+          if (shadowRoot.getElementById(styleId)) return true;
           var style = document.createElement("style");
-          style.id = "minimal-ui-style";
-          style.textContent =
-            ".controls-progress," +
-            ".controls-timeline," +
-            "#progress," +
-            ".progress-bar," +
-            '[class*="progress"] {' +
-            "  opacity: 0 !important;" +
-            "  visibility: hidden !important;" +
-            "  pointer-events: none !important;" +
-            "  max-height: 0 !important;" +
-            "}" +
-            ".overlay-text," +
-            ".media-text," +
-            ".media-metadata," +
-            ".title-overlay," +
-            ".overlay-metadata," +
-            ".media-title," +
-            ".overlay-title," +
-            "#metadata," +
-            "#overlay-title," +
-            ".overlay-image," +
-            ".thumbnail," +
-            ".media-image," +
-            "#overlay-image," +
-            ".current-time," +
-            ".duration," +
-            ".time-label," +
-            '[class*="time-label"] {' +
-            "  display: none !important;" +
-            "}" +
-            ".next-up," +
-            '[class*="next-preview"],' +
-            '[class*="NextPreview"] {' +
-            "  display: none !important;" +
-            "}";
-
-          player.shadowRoot.appendChild(style);
-          log("info", "minimal-ui style injected into shadow root");
+          style.id = styleId;
+          style.textContent = css;
+          shadowRoot.appendChild(style);
           return true;
         }
 
-        function watchForPlayerElement() {
+        function applyMinimalUi() {
+          var player = document.querySelector("cast-media-player");
+          if (!player || !player.shadowRoot) return false;
+
+          injectStyle(player.shadowRoot, "minimal-ui-player", PLAYER_SHADOW_CSS);
+
+          var overlay = player.shadowRoot.querySelector("tv-overlay");
+          if (!overlay || !overlay.shadowRoot) return false;
+
+          injectStyle(overlay.shadowRoot, "minimal-ui-overlay", OVERLAY_SHADOW_CSS);
+          return true;
+        }
+
+        function watchForMinimalUi() {
           var tries = 0;
           var timer = setInterval(function () {
-            var player = document.querySelector("cast-media-player");
-            if (player && player.shadowRoot) {
-              if (injectMinimalPlayerChrome(player)) {
-                clearInterval(timer);
-              }
-            }
-            if (++tries > 100) {
-              log("warn", "cast-media-player shadow root not found after 10s");
-              clearInterval(timer);
-            }
+            if (applyMinimalUi() || ++tries > 300) clearInterval(timer);
           }, 100);
         }
 
-        var ctx = cast.framework.CastReceiverContext.getInstance();
+        function observePlayerShadow() {
+          var player = document.querySelector("cast-media-player");
+          if (!player) return;
 
-        if (DEBUG_RECEIVER && castDebugLogger) {
-          ctx.addEventListener(cast.framework.system.EventType.READY, function () {
-            if (!castDebugLogger.debugOverlayElement_) {
-              castDebugLogger.setEnabled(true);
-              castDebugLogger.showDebugLogs(true);
-            }
-            log("info", "receiver READY — remote :9222 may be unavailable on this device");
-          });
+          function attachObserver() {
+            if (!player.shadowRoot) return;
+            applyMinimalUi();
+            new MutationObserver(function () {
+              applyMinimalUi();
+            }).observe(player.shadowRoot, { childList: true, subtree: true });
+          }
+
+          if (player.shadowRoot) attachObserver();
+          else customElements.whenDefined("cast-media-player").then(attachObserver);
         }
 
+        var ctx = cast.framework.CastReceiverContext.getInstance();
         ctx.start();
+        watchForMinimalUi();
+        observePlayerShadow();
 
         if (cast.framework.ui && cast.framework.ui.PlayerDataBinder) {
           var playerData = {};
           var binder = new cast.framework.ui.PlayerDataBinder(playerData);
           binder.addEventListener(
             cast.framework.ui.PlayerDataEventType.STATE_CHANGED,
-            function () {
-              injectMinimalPlayerChrome(
-                document.querySelector("cast-media-player")
-              );
-            }
+            applyMinimalUi
           );
         }
-
-        watchForPlayerElement();
       })();
     </script>
   </body>
