@@ -13,6 +13,7 @@
         height: 100%;
         overflow: hidden;
         background: #000;
+        --playback-logo-image: none;
       }
       cast-media-player {
         display: block;
@@ -21,9 +22,10 @@
         height: 100%;
         position: relative;
         --next-preview-visibility: hidden;
-        --watermark-image: url("https://firebasestorage.googleapis.com/v0/b/maryhartman-project.appspot.com/o/assets%2Fwatermark.png?alt=media");
-        --watermark-size: 65px;
-        --watermark-position: 0 calc(100% + var(--watermark-size));
+        --progress-color: rgba(0, 0, 0, 0);
+        --watermark-image: none;
+        --watermark-size: 0;
+        --watermark-opacity: 0;
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
@@ -31,105 +33,81 @@
   <body>
     <cast-media-player></cast-media-player>
     <script>
-      /*
-        Strip metadata on LOAD (no official CSS to hide the row on TV):
-        https://developers.google.com/cast/docs/web_receiver/customize_ui
-        https://developers.google.com/cast/docs/web_receiver/secondary_image
-
-        Set STRIP_METADATA_FOR_UI to false to show sender metadata on the TV again.
-
-        Watermark stacking: there is no --watermark-z-index in Google's table
-        (https://developers.google.com/cast/docs/web_receiver/customize_ui). We
-        inject shadow CSS so .watermark uses position:absolute + a high z-index.
-      */
       (function () {
-        var STRIP_METADATA_FOR_UI = true;
-        var WATERMARK_Z_INDEX = 9999999999;
+        function injectMinimalPlayerChrome(player) {
+          if (!player || !player.shadowRoot) return;
+          if (player.shadowRoot.querySelector("#minimal-ui-style")) return;
 
-        function injectWatermarkStackCss(shadowRoot) {
-          if (!shadowRoot) return;
-          var marker = "[data-rcv-wm-stack]";
-          var el = shadowRoot.querySelector(marker);
-          if (!el) {
-            el = document.createElement("style");
-            el.setAttribute("data-rcv-wm-stack", "1");
-            shadowRoot.insertBefore(el, shadowRoot.firstChild);
-          }
-          el.textContent =
-            ".watermark{position:absolute!important;z-index:" +
-            WATERMARK_Z_INDEX +
-            "!important;pointer-events:none!important;}";
+          var style = document.createElement("style");
+          style.id = "minimal-ui-style";
+          style.textContent =
+            ".controls-progress," +
+            ".controls-timeline," +
+            "#progress," +
+            ".progress-bar," +
+            '[class*="progress"] {' +
+            "  opacity: 0 !important;" +
+            "  visibility: hidden !important;" +
+            "  pointer-events: none !important;" +
+            "  max-height: 0 !important;" +
+            "}" +
+            ".overlay-text," +
+            ".media-text," +
+            ".media-metadata," +
+            ".title-overlay," +
+            ".overlay-metadata," +
+            ".media-title," +
+            ".overlay-title," +
+            "#metadata," +
+            "#overlay-title," +
+            ".overlay-image," +
+            ".thumbnail," +
+            ".media-image," +
+            "#overlay-image," +
+            ".current-time," +
+            ".duration," +
+            ".time-label," +
+            '[class*="time-label"] {' +
+            "  display: none !important;" +
+            "}" +
+            ".next-up," +
+            '[class*="next-preview"],' +
+            '[class*="NextPreview"] {' +
+            "  display: none !important;" +
+            "}";
+
+          player.shadowRoot.appendChild(style);
         }
 
-        function walkOpenShadowTrees(root, visit) {
-          if (!root) return;
-          visit(root);
-          root.querySelectorAll("*").forEach(function (n) {
-            if (n.shadowRoot) walkOpenShadowTrees(n.shadowRoot, visit);
-          });
-        }
-
-        function applyWatermarkZStackFix() {
-          var cmp = document.querySelector("cast-media-player");
-          if (!cmp || !cmp.shadowRoot) return;
-          walkOpenShadowTrees(cmp.shadowRoot, injectWatermarkStackCss);
-        }
-
-        function attachWatermarkZStackWhenReady() {
-          var cmp = document.querySelector("cast-media-player");
-
-          function tick() {
-            if (!cmp || !cmp.shadowRoot) {
-              requestAnimationFrame(tick);
-              return;
+        function watchForPlayerElement() {
+          var tries = 0;
+          var timer = setInterval(function () {
+            var player = document.querySelector("cast-media-player");
+            if (player && player.shadowRoot) {
+              injectMinimalPlayerChrome(player);
+              clearInterval(timer);
             }
-            applyWatermarkZStackFix();
-            new MutationObserver(applyWatermarkZStackFix).observe(cmp.shadowRoot, {
-              subtree: true,
-              childList: true,
-            });
-          }
-
-          tick();
-        }
-
-        function stripReceiverDisplayMetadata(loadRequestData) {
-          if (!STRIP_METADATA_FOR_UI) return;
-          var media = loadRequestData && loadRequestData.media;
-          var md = media && media.metadata;
-          if (!md) return;
-
-          md.images = [];
-          if ("secondaryImage" in md) md.secondaryImage = null;
-
-          if ("title" in md) md.title = "";
-          if ("subtitle" in md) md.subtitle = "";
-          if ("albumName" in md) md.albumName = "";
-          if ("albumArtist" in md) md.albumArtist = "";
-          if ("artist" in md) md.artist = "";
-          if ("composer" in md) md.composer = "";
-          if ("seriesTitle" in md) md.seriesTitle = "";
-          if ("episodeTitle" in md) md.episodeTitle = "";
+            if (++tries > 100) clearInterval(timer);
+          }, 100);
         }
 
         var ctx = cast.framework.CastReceiverContext.getInstance();
-        var pm = ctx.getPlayerManager();
-
-        pm.setMessageInterceptor(
-          cast.framework.messages.MessageType.LOAD,
-          function (loadRequestData) {
-            stripReceiverDisplayMetadata(loadRequestData);
-            return loadRequestData;
-          }
-        );
-
         ctx.start();
 
-        attachWatermarkZStackWhenReady();
-        pm.addEventListener(
-          cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
-          applyWatermarkZStackFix
-        );
+        if (cast.framework.ui && cast.framework.ui.PlayerDataBinder) {
+          var playerData = {};
+          var binder = new cast.framework.ui.PlayerDataBinder(playerData);
+          binder.addEventListener(
+            cast.framework.ui.PlayerDataEventType.STATE_CHANGED,
+            function () {
+              injectMinimalPlayerChrome(
+                document.querySelector("cast-media-player")
+              );
+            }
+          );
+        }
+
+        watchForPlayerElement();
       })();
     </script>
   </body>
