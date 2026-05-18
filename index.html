@@ -41,14 +41,29 @@
           "video.mediaElement, #castMediaElement { display: block !important; visibility: visible !important; opacity: 1 !important; }";
 
         var OVERLAY_SHADOW_CSS =
-          ".controls-progress," +
-          ".controls-progress-inner," +
-          ".controls-progress-thumb," +
-          ".controls-timeline," +
+          "#castControlsTimeline," +
+          ".controlsTimeline," +
+          "#castControlsProgress," +
+          ".controlsProgress," +
+          "#castControlsProgressInner," +
+          ".controlsProgressInner," +
+          "#castControlsSeekable," +
+          ".controlsSeekable," +
+          "#castControlsSeekablePlayed," +
+          ".controlsSeekablePlayed," +
+          ".controlsTimelineLabels," +
+          "#castControlsCurTime," +
+          ".controlsCurTime," +
+          "#castControlsTotalTime," +
+          ".controlsTotalTime," +
+          ".videoLiveIndicator," +
+          ".liveIndicator," +
+          ".liveLabel," +
           ".progressBar," +
-          ".progress-bar," +
-          "#progress," +
-          '[class*="progress"] {' +
+          '[class*="Progress"],' +
+          '[class*="Timeline"],' +
+          '[class*="CurTime"],' +
+          '[class*="TotalTime"] {' +
           "  display: none !important;" +
           "  visibility: hidden !important;" +
           "  opacity: 0 !important;" +
@@ -108,11 +123,25 @@
 
         function injectStyle(shadowRoot, styleId, css) {
           if (!shadowRoot) return false;
-          if (shadowRoot.getElementById(styleId)) return true;
+          var existing = shadowRoot.getElementById(styleId);
+          if (existing) {
+            existing.textContent = css;
+            return true;
+          }
           var style = document.createElement("style");
           style.id = styleId;
           style.textContent = css;
           shadowRoot.appendChild(style);
+          return true;
+        }
+
+        function injectOverlayStyles(tvOverlay) {
+          if (!tvOverlay || !tvOverlay.shadowRoot) return false;
+          injectStyle(tvOverlay.shadowRoot, "minimal-ui-overlay", OVERLAY_SHADOW_CSS);
+          var inner = tvOverlay.shadowRoot.querySelector("overlay, .overlay");
+          if (inner && inner.shadowRoot) {
+            injectStyle(inner.shadowRoot, "minimal-ui-overlay-inner", OVERLAY_SHADOW_CSS);
+          }
           return true;
         }
 
@@ -123,10 +152,8 @@
           injectStyle(player.shadowRoot, "minimal-ui-player", PLAYER_SHADOW_CSS);
 
           var overlay = player.shadowRoot.querySelector("tv-overlay");
-          if (!overlay || !overlay.shadowRoot) return false;
-
-          injectStyle(overlay.shadowRoot, "minimal-ui-overlay", OVERLAY_SHADOW_CSS);
-          return true;
+          if (!overlay) return false;
+          return injectOverlayStyles(overlay);
         }
 
         function watchForMinimalUi() {
