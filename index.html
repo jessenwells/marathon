@@ -29,14 +29,32 @@
       }
     </style>
     <script src="https://www.gstatic.com/cast/sdk/libs/caf_receiver/v3/cast_receiver_framework.js"></script>
+    <!-- Set false before production. Ultra often blocks chrome://inspect :9222 — use this + CaC tool instead. -->
+    <script>
+      var DEBUG_RECEIVER = true;
+    </script>
+    <script src="https://www.gstatic.com/cast/sdk/libs/devtools/debug_layer/caf_receiver_logger.js"></script>
   </head>
   <body>
     <cast-media-player></cast-media-player>
     <script>
       (function () {
+        var LOG_TAG = "minimal-ui";
+        var castDebugLogger =
+          typeof cast !== "undefined" &&
+          cast.debug &&
+          cast.debug.CastDebugLogger
+            ? cast.debug.CastDebugLogger.getInstance()
+            : null;
+
+        function log(level, message) {
+          if (!castDebugLogger || !DEBUG_RECEIVER) return;
+          castDebugLogger[level](LOG_TAG, message);
+        }
+
         function injectMinimalPlayerChrome(player) {
-          if (!player || !player.shadowRoot) return;
-          if (player.shadowRoot.querySelector("#minimal-ui-style")) return;
+          if (!player || !player.shadowRoot) return false;
+          if (player.shadowRoot.querySelector("#minimal-ui-style")) return true;
 
           var style = document.createElement("style");
           style.id = "minimal-ui-style";
@@ -77,6 +95,8 @@
             "}";
 
           player.shadowRoot.appendChild(style);
+          log("info", "minimal-ui style injected into shadow root");
+          return true;
         }
 
         function watchForPlayerElement() {
@@ -84,14 +104,29 @@
           var timer = setInterval(function () {
             var player = document.querySelector("cast-media-player");
             if (player && player.shadowRoot) {
-              injectMinimalPlayerChrome(player);
+              if (injectMinimalPlayerChrome(player)) {
+                clearInterval(timer);
+              }
+            }
+            if (++tries > 100) {
+              log("warn", "cast-media-player shadow root not found after 10s");
               clearInterval(timer);
             }
-            if (++tries > 100) clearInterval(timer);
           }, 100);
         }
 
         var ctx = cast.framework.CastReceiverContext.getInstance();
+
+        if (DEBUG_RECEIVER && castDebugLogger) {
+          ctx.addEventListener(cast.framework.system.EventType.READY, function () {
+            if (!castDebugLogger.debugOverlayElement_) {
+              castDebugLogger.setEnabled(true);
+              castDebugLogger.showDebugLogs(true);
+            }
+            log("info", "receiver READY — remote :9222 may be unavailable on this device");
+          });
+        }
+
         ctx.start();
 
         if (cast.framework.ui && cast.framework.ui.PlayerDataBinder) {
