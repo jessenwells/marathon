@@ -312,73 +312,11 @@
         }
 
         var pm = ctx.getPlayerManager();
-
-        // Progressive MP4 cannot use a second media element while playing, but
-        // we can warm DNS/TLS and cache the file head before the handoff.
-        var warmedUrls = {};
-        var WARM_LEAD_SEC = 120;
-        var WARM_BYTES = 2 * 1024 * 1024;
-
-        function getNextItemMediaUrl(queueManager) {
-          var items = queueManager.getItems();
-          var current = queueManager.getCurrentItem();
-          if (!items || !current) return null;
-          for (var i = 0; i < items.length; i++) {
-            if (items[i].itemId === current.itemId && i + 1 < items.length) {
-              var media = items[i + 1].media;
-              return (media && (media.contentUrl || media.contentId)) || null;
-            }
-          }
-          return null;
-        }
-
-        function warmMp4Head(url) {
-          if (!url || warmedUrls[url]) return;
-          warmedUrls[url] = true;
-          fetch(url, {
-            method: "GET",
-            headers: { Range: "bytes=0-" + (WARM_BYTES - 1) },
-          })
-            .then(function () {
-              console.info("[marathon-warm] prefetched head");
-            })
-            .catch(function (err) {
-              console.warn("[marathon-warm] prefetch failed", err);
-              delete warmedUrls[url];
-            });
-        }
-
-        function warmNextInQueue() {
-          var qm = pm.getQueueManager();
-          if (!qm) return;
-          var nextUrl = getNextItemMediaUrl(qm);
-          if (nextUrl) warmMp4Head(nextUrl);
-        }
-
-        function maybeWarmNearChapterEnd() {
-          var duration = pm.getDurationSec();
-          var currentTime = pm.getCurrentTimeSec();
-          if (!duration || duration <= 0) return;
-          if (duration - currentTime > WARM_LEAD_SEC) return;
-          warmNextInQueue();
-        }
-
-        pm.addEventListener(
-          cast.framework.events.EventType.QUEUE_CHANGED,
-          function () {
-            warmedUrls = {};
-            warmNextInQueue();
-          }
-        );
-        pm.addEventListener(cast.framework.events.EventType.TIME_UPDATE, function () {
-          maybeWarmNearChapterEnd();
-        });
         pm.addEventListener(
           cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
           function () {
             applySubtitleStyle();
             syncBufferingSpinner(playerData);
-            warmNextInQueue();
           }
         );
         pm.addEventListener(cast.framework.events.EventType.BUFFERING, function () {
