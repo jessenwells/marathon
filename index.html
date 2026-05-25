@@ -189,6 +189,17 @@
           }
         }
 
+        // Clear text tracks when new media loads so a previous show's cue
+        // does not linger. The Flutter sender sets activeTrackIds on/off.
+        function clearActiveSubtitleTracks() {
+          var pm = cast.framework.CastReceiverContext.getInstance().getPlayerManager();
+          try {
+            pm.setActiveTrackIds([]);
+          } catch (e) {
+            console.warn("[subtitles] clear active tracks failed", e);
+          }
+        }
+
         function syncBufferingSpinner(playerData) {
           var player = document.querySelector("cast-media-player");
           if (!player || !player.shadowRoot) return;
@@ -312,6 +323,10 @@
         }
 
         var pm = ctx.getPlayerManager();
+        pm.addEventListener(
+          cast.framework.events.EventType.PLAYER_LOADING,
+          clearActiveSubtitleTracks
+        );
         pm.addEventListener(
           cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
           function () {
