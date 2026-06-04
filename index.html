@@ -94,9 +94,9 @@
         var preparingOverlay = document.getElementById(
           "marathon-preparing-overlay"
         );
-        var forcePreparingOverlay = false;
-        var senderConnectedNoMedia = false;
-        var playbackStarted = false;
+        // Hidden by default; only enabled for Cast connect or sender QUEUE_LOAD/LOAD.
+        var showBrandedPrepare = false;
+        var sessionHasPlayed = false;
 
         function setPreparingOverlayVisible(show) {
           if (!preparingOverlay) return;
@@ -104,36 +104,53 @@
           else preparingOverlay.setAttribute("hidden", "");
         }
 
-        function isPlayerLoadingOrBuffering(playerData) {
-          var player = document.querySelector("cast-media-player");
-          if (!player || !player.shadowRoot) return false;
-          var castPlayer =
-            player.shadowRoot.querySelector("#castPlayer") ||
-            player.shadowRoot.querySelector(".player");
-          if (!castPlayer) return false;
-          var dataState = castPlayer.getAttribute("data-state");
-          if (dataState === "loading" || dataState === "buffering") return true;
-          if (playerData && cast.framework.ui && cast.framework.ui.State) {
-            var uiState = playerData.state;
-            return (
-              uiState === cast.framework.ui.State.LOADING ||
-              uiState === cast.framework.ui.State.BUFFERING
+        function showBrandedPrepareOverlay() {
+          showBrandedPrepare = true;
+          setPreparingOverlayVisible(true);
+        }
+
+        function hideBrandedPrepareOverlay() {
+          showBrandedPrepare = false;
+          setPreparingOverlayVisible(false);
+        }
+
+        function updatePreparingOverlay() {
+          setPreparingOverlayVisible(showBrandedPrepare);
+        }
+
+        function wantsPreparingUi(customData) {
+          return (
+            customData &&
+            customData.marathon &&
+            customData.marathon.ui === "preparing"
+          );
+        }
+
+        function installLoadInterceptors(playerManager) {
+          if (!cast.framework.messages) return;
+          var MessageType = cast.framework.messages.MessageType;
+          if (MessageType.QUEUE_LOAD) {
+            playerManager.setMessageInterceptor(
+              MessageType.QUEUE_LOAD,
+              function (request) {
+                if (wantsPreparingUi(request.customData)) {
+                  showBrandedPrepareOverlay();
+                }
+                return request;
+              }
             );
           }
-          return false;
-        }
-
-        // Branded overlay: initial Cast connect and show/queue start only — not chapter autoplay or seek.
-        function shouldShowPreparingOverlay(playerData) {
-          if (forcePreparingOverlay || senderConnectedNoMedia) return true;
-          if (!playbackStarted && isPlayerLoadingOrBuffering(playerData)) {
-            return true;
+          if (MessageType.LOAD) {
+            playerManager.setMessageInterceptor(
+              MessageType.LOAD,
+              function (request) {
+                if (wantsPreparingUi(request.customData)) {
+                  showBrandedPrepareOverlay();
+                }
+                return request;
+              }
+            );
           }
-          return false;
-        }
-
-        function updatePreparingOverlay(playerData) {
-          setPreparingOverlayVisible(shouldShowPreparingOverlay(playerData));
         }
 
         function hasLoadedMedia(pm) {
@@ -145,11 +162,6 @@
           }
         }
 
-        function mediaRequestsPreparingOverlay(media) {
-          if (!media || !media.customData) return false;
-          var marathon = media.customData.marathon;
-          return marathon && marathon.ui === "preparing";
-        }
         var PLAYER_SHADOW_CSS =
           ".slideshow, .slideshow.active { display: none !important; }" +
           ".player .logo, .player .splash { color: transparent !important; font-size: 0 !important; }" +
@@ -322,8 +334,8 @@
           }
         }
 
-        function syncBufferingSpinner(playerData) {
-          updatePreparingOverlay(playerData);
+        function syncBufferingSpinner() {
+          updatePreparingOverlay();
         }
 
         function injectStyle(shadowRoot, styleId, css) {
@@ -358,7 +370,7 @@
 
           injectStyle(player.shadowRoot, "minimal-ui-player", PLAYER_SHADOW_CSS);
           applySubtitleStyle();
-          syncBufferingSpinner(playerData);
+          syncBufferingSpinner();
 
           var overlay = player.shadowRoot.querySelector("tv-overlay");
           if (!overlay) return false;
@@ -380,13 +392,13 @@
             if (!player.shadowRoot) return;
             applyMinimalUi();
             new MutationObserver(function () {
-              syncBufferingSpinner(playerData);
+              syncBufferingSpinner();
               applyMinimalUi();
             }).observe(player.shadowRoot, { childList: true, subtree: true });
             var castPlayer = player.shadowRoot.querySelector("#castPlayer, .player");
             if (castPlayer) {
               new MutationObserver(function () {
-                syncBufferingSpinner(playerData);
+                syncBufferingSpinner();
               }).observe(castPlayer, {
                 attributes: true,
                 attributeFilter: ["data-state"],
@@ -409,22 +421,23 @@
 
         var ctx = cast.framework.CastReceiverContext.getInstance();
         var pm = ctx.getPlayerManager();
+        installLoadInterceptors(pm);
+        hideBrandedPrepareOverlay();
 
         ctx.addEventListener(cast.framework.system.EventType.READY, applySubtitleStyle);
         ctx.addEventListener(
           cast.framework.system.EventType.SENDER_CONNECTED,
           function () {
-            senderConnectedNoMedia = !hasLoadedMedia(pm);
-            updatePreparingOverlay(playerData);
+            if (!hasLoadedMedia(pm) && !sessionHasPlayed) {
+              showBrandedPrepareOverlay();
+            }
           }
         );
         ctx.addEventListener(
           cast.framework.system.EventType.SENDER_DISCONNECTED,
           function () {
-            senderConnectedNoMedia = false;
-            forcePreparingOverlay = false;
-            playbackStarted = false;
-            updatePreparingOverlay(playerData);
+            sessionHasPlayed = false;
+            hideBrandedPrepareOverlay();
           }
         );
         ctx.start();
@@ -436,7 +449,7 @@
           binder.addEventListener(
             cast.framework.ui.PlayerDataEventType.STATE_CHANGED,
             function () {
-              syncBufferingSpinner(playerData);
+              syncBufferingSpinner();
               applyMinimalUi();
             }
           );
@@ -446,46 +459,30 @@
           cast.framework.events.EventType.PLAYER_LOADING,
           function () {
             clearActiveSubtitleTracks();
-            senderConnectedNoMedia = false;
-            syncBufferingSpinner(playerData);
-          }
-        );
-        pm.addEventListener(
-          cast.framework.events.EventType.MEDIA_LOADED,
-          function (event) {
-            if (event && event.media && mediaRequestsPreparingOverlay(event.media)) {
-              forcePreparingOverlay = true;
-            }
-            updatePreparingOverlay(playerData);
+            if (sessionHasPlayed) hideBrandedPrepareOverlay();
           }
         );
         pm.addEventListener(
           cast.framework.events.EventType.PLAYER_LOAD_COMPLETE,
           function () {
             applySubtitleStyle();
-            forcePreparingOverlay = false;
-            senderConnectedNoMedia = false;
-            syncBufferingSpinner(playerData);
+            hideBrandedPrepareOverlay();
           }
         );
         pm.addEventListener(cast.framework.events.EventType.BUFFERING, function () {
-          syncBufferingSpinner(playerData);
+          if (sessionHasPlayed) hideBrandedPrepareOverlay();
         });
         pm.addEventListener(cast.framework.events.EventType.BUFFERED, function () {
-          forcePreparingOverlay = false;
-          syncBufferingSpinner(playerData);
+          hideBrandedPrepareOverlay();
         });
         pm.addEventListener(cast.framework.events.EventType.PLAYING, function () {
-          playbackStarted = true;
-          forcePreparingOverlay = false;
-          senderConnectedNoMedia = false;
-          updatePreparingOverlay(playerData);
+          sessionHasPlayed = true;
+          hideBrandedPrepareOverlay();
         });
         pm.addEventListener(
           cast.framework.events.EventType.MEDIA_FINISHED,
           function () {
-            forcePreparingOverlay = false;
-            updatePreparingOverlay(playerData);
+            hideBrandedPrepareOverlay();
           }
         );
       })();
