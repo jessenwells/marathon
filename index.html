@@ -96,6 +96,7 @@
         );
         var forcePreparingOverlay = false;
         var senderConnectedNoMedia = false;
+        var playbackStarted = false;
 
         function setPreparingOverlayVisible(show) {
           if (!preparingOverlay) return;
@@ -103,8 +104,7 @@
           else preparingOverlay.setAttribute("hidden", "");
         }
 
-        function shouldShowPreparingOverlay(playerData) {
-          if (forcePreparingOverlay || senderConnectedNoMedia) return true;
+        function isPlayerLoadingOrBuffering(playerData) {
           var player = document.querySelector("cast-media-player");
           if (!player || !player.shadowRoot) return false;
           var castPlayer =
@@ -119,6 +119,15 @@
               uiState === cast.framework.ui.State.LOADING ||
               uiState === cast.framework.ui.State.BUFFERING
             );
+          }
+          return false;
+        }
+
+        // Branded overlay: initial Cast connect and show/queue start only — not chapter autoplay or seek.
+        function shouldShowPreparingOverlay(playerData) {
+          if (forcePreparingOverlay || senderConnectedNoMedia) return true;
+          if (!playbackStarted && isPlayerLoadingOrBuffering(playerData)) {
+            return true;
           }
           return false;
         }
@@ -414,6 +423,7 @@
           function () {
             senderConnectedNoMedia = false;
             forcePreparingOverlay = false;
+            playbackStarted = false;
             updatePreparingOverlay(playerData);
           }
         );
@@ -466,10 +476,18 @@
           syncBufferingSpinner(playerData);
         });
         pm.addEventListener(cast.framework.events.EventType.PLAYING, function () {
+          playbackStarted = true;
           forcePreparingOverlay = false;
           senderConnectedNoMedia = false;
           updatePreparingOverlay(playerData);
         });
+        pm.addEventListener(
+          cast.framework.events.EventType.MEDIA_FINISHED,
+          function () {
+            forcePreparingOverlay = false;
+            updatePreparingOverlay(playerData);
+          }
+        );
       })();
     </script>
   </body>
