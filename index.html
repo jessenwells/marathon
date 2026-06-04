@@ -26,6 +26,8 @@
         --watermark-image: none;
         --watermark-size: 0;
         --watermark-opacity: 0;
+        --spinner-image: none;
+        --buffering-image: none;
       }
       @keyframes marathon-spin {
         0% {
@@ -140,30 +142,21 @@
           return marathon && marathon.ui === "preparing";
         }
         var PLAYER_SHADOW_CSS =
-          "@-webkit-keyframes minimal-ui-spin { 0% { -webkit-transform: rotate(0deg); } 100% { -webkit-transform: rotate(360deg); } }" +
-          "@keyframes minimal-ui-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }" +
           ".slideshow, .slideshow.active { display: none !important; }" +
           ".player .logo, .player .splash { color: transparent !important; font-size: 0 !important; }" +
           ".player .background { background-image: none !important; }" +
           "video.mediaElement, #castMediaElement { display: block !important; visibility: visible !important; opacity: 1 !important; }" +
-          ".player[data-media-category='VIDEO'][data-state='loading'] .spinner," +
-          ".player[data-media-category='VIDEO'][data-state='buffering'] .spinner," +
-          ".player[data-minimal-spinner='true'] .spinner {" +
-          "  display: block !important;" +
-          "  visibility: visible !important;" +
-          "  opacity: 1 !important;" +
-          "  position: absolute !important;" +
-          "  left: 50% !important;" +
-          "  top: 50% !important;" +
-          "  bottom: auto !important;" +
-          "  right: auto !important;" +
-          "  margin-left: -16px !important;" +
-          "  margin-top: -16px !important;" +
-          "  width: 32px !important;" +
-          "  height: 32px !important;" +
-          "  z-index: 1000 !important;" +
-          "  -webkit-animation: minimal-ui-spin 1s infinite linear !important;" +
-          "  animation: minimal-ui-spin 1s infinite linear !important;" +
+          ".player .spinner," +
+          "#castPlayer .spinner," +
+          ".spinner," +
+          '[class*="spinner"],' +
+          '[class*="Spinner"] {' +
+          "  display: none !important;" +
+          "  visibility: hidden !important;" +
+          "  opacity: 0 !important;" +
+          "  width: 0 !important;" +
+          "  height: 0 !important;" +
+          "  pointer-events: none !important;" +
           "}" +
           "video::cue, video::cue(v), ::cue, ::cue(v) {" +
           "  font-family: sans-serif !important;" +
@@ -254,6 +247,21 @@
           "  visibility: visible !important;" +
           "  opacity: 1 !important;" +
           "}" +
+          ".spinner," +
+          '[class*="spinner"],' +
+          '[class*="Spinner"],' +
+          ".buffering," +
+          '[class*="buffering"],' +
+          '[class*="Buffering"],' +
+          '[class*="loading-indicator"],' +
+          '[class*="LoadingIndicator"] {' +
+          "  display: none !important;" +
+          "  visibility: hidden !important;" +
+          "  opacity: 0 !important;" +
+          "  width: 0 !important;" +
+          "  height: 0 !important;" +
+          "  pointer-events: none !important;" +
+          "}" +
           ":host([data-media-category='VIDEO'][data-state='buffering']) .gradient," +
           ":host([data-media-category='VIDEO'][data-state='paused'][data-display-status='false']) .gradient," +
           ":host([data-media-category='VIDEO'][data-state='loading']) .gradient," +
@@ -306,35 +314,7 @@
         }
 
         function syncBufferingSpinner(playerData) {
-          var player = document.querySelector("cast-media-player");
-          if (!player || !player.shadowRoot) return;
-          var castPlayer =
-            player.shadowRoot.querySelector("#castPlayer") ||
-            player.shadowRoot.querySelector(".player");
-          if (!castPlayer) return;
-
-          var brandedVisible = shouldShowPreparingOverlay(playerData);
           updatePreparingOverlay(playerData);
-
-          if (brandedVisible) {
-            castPlayer.removeAttribute("data-minimal-spinner");
-            return;
-          }
-
-          var show = false;
-          var dataState = castPlayer.getAttribute("data-state");
-          if (dataState === "loading" || dataState === "buffering") show = true;
-
-          if (playerData && cast.framework.ui && cast.framework.ui.State) {
-            var uiState = playerData.state;
-            show =
-              show ||
-              uiState === cast.framework.ui.State.LOADING ||
-              uiState === cast.framework.ui.State.BUFFERING;
-          }
-
-          if (show) castPlayer.setAttribute("data-minimal-spinner", "true");
-          else castPlayer.removeAttribute("data-minimal-spinner");
         }
 
         function injectStyle(shadowRoot, styleId, css) {
